@@ -8,7 +8,7 @@ transfer learning, evaluation, a REST API, a web dashboard, user-triggered and a
 |---|---|
 | 🎥 **Video demo** | `https://youtu.be/<your-video-id>` |
 | 🌐 **Live app** | `https://coffeeleaf-keyla.onrender.com` (free tier: the first visit after 15 idle minutes takes ~1 min to wake up) |
-| 📘 **API docs (Swagger)** | `<live app URL>/docs` |
+| 📘 **API docs (Swagger)** | `https://coffeeleaf-keyla.onrender.com/docs` |
 | 📓 **Notebook** | [`notebook/coffee_leaf_disease.ipynb`](notebook/coffee_leaf_disease.ipynb) |
 
 ---
