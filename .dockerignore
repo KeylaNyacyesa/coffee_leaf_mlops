@@ -1,0 +1,18 @@
+.git
+.venv
+venv
+**/__pycache__
+**/.ipynb_checkpoints
+notebook
+samples
+load_test_results
+scripts
+data/mlops.db*
+data/uploads/*
+models/archive
+models/baseline_cnn.h5
+README.md
+deploy
+# the full Keras models are only needed by the notebook; the API uses the exported files
+models/*.h5
+wheels

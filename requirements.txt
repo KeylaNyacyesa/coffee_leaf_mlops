@@ -1,0 +1,12 @@
+# Everything needed to run the notebook (TensorFlow) and the API locally.
+# Versions match the ones the model was trained with, so the .h5 file loads identically.
+tensorflow==2.21.0
+keras==3.15.1
+ai-edge-litert==2.4.0
+numpy>=1.26,<3
+pillow>=10.0
+h5py>=3.10
+scikit-learn>=1.4
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9

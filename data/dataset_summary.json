@@ -1,0 +1,42 @@
+{
+  "Cercospora": {
+    "raw": 7681,
+    "unique": 322,
+    "groups": 81,
+    "train": 209,
+    "val": 45,
+    "test": 68
+  },
+  "Healthy": {
+    "raw": 2885,
+    "unique": 60,
+    "groups": 12,
+    "train": 40,
+    "val": 10,
+    "test": 10
+  },
+  "Leaf_rust": {
+    "raw": 8336,
+    "unique": 1042,
+    "groups": 521,
+    "train": 678,
+    "val": 156,
+    "test": 208
+  },
+  "Miner": {
+    "raw": 2865,
+    "unique": 1321,
+    "groups": 460,
+    "train": 857,
+    "val": 198,
+    "test": 266
+  },
+  "Phoma": {
+    "raw": 6571,
+    "unique": 691,
+    "groups": 181,
+    "train": 447,
+    "val": 108,
+    "test": 136
+  }
+}

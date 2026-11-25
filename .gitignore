@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+.env
+.DS_Store
+# runtime state (created by the API)
+data/mlops.db*
+data/uploads/*
+!data/uploads/.gitkeep
+models/archive/
+models/*.tmp.h5

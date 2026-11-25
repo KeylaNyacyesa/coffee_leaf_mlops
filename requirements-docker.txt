@@ -1,0 +1,10 @@
+# Used by the Dockerfile (the API + retraining). No TensorFlow: the API runs the lightweight
+# export of the trained model (TFLite feature extractor + NumPy head, see src/serving.py),
+# so the container needs ~150 MB of RAM and fits a free 512 MB cloud instance.
+ai-edge-litert==2.4.0
+numpy>=1.26,<3
+pillow>=10.0
+scikit-learn>=1.4
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CoffeeLeaf AI · Disease Classifier</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:,">
+<script src="/static/vendor/chart.umd.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="leaf">❦</span> CoffeeLeaf<b>AI</b><span class="sub">disease classifier · MLOps console</span></div>
+  <div class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText">connecting…</span></div>
+</header>
+
+<nav>
+  <button class="tab active" data-tab="overview">Overview &amp; uptime</button>
+  <button class="tab" data-tab="predict">Predict</button>
+  <button class="tab" data-tab="insights">Data insights</button>
+  <button class="tab" data-tab="retrain">Upload &amp; retrain</button>
+</nav>
+
+<main>
+<!-- ============================ OVERVIEW ============================ -->
+<section id="overview" class="panel active">
+  <div class="cards">
+    <div class="card"><div class="k">API status</div><div class="v" id="cStatus">–</div><div class="s" id="cContainer"></div></div>
+    <div class="card"><div class="k">Uptime</div><div class="v mono" id="cUptime">–</div><div class="s" id="cAvail">availability –</div></div>
+    <div class="card"><div class="k">Model version</div><div class="v mono small" id="cVersion">–</div><div class="s" id="cLoaded"></div></div>
+    <div class="card accent"><div class="k">Test accuracy</div><div class="v" id="cAcc">–</div><div class="s" id="cF1"></div></div>
+    <div class="card"><div class="k">Predictions served</div><div class="v" id="cPreds">–</div><div class="s" id="cLat"></div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="box">
+      <h3>Health-check response time <span class="muted">(pinged every 5 s)</span></h3>
+      <canvas id="uptimeChart" height="150"></canvas>
+    </div>
+    <div class="box">
+      <h3>Training curves <span class="muted" id="historyNote">(dashed line = start of fine-tuning)</span></h3>
+      <canvas id="historyChart" height="150"></canvas>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="box">
+      <h3>Evaluation on held-out test set</h3>
+      <table class="metrics" id="metricsTable"></table>
+      <p class="muted small" id="metricsNote"></p>
+    </div>
+    <div class="box">
+      <h3>Confusion matrix <span class="muted">(rows = true, cols = predicted)</span></h3>
+      <div id="confusion"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PREDICT ============================ -->
+<section id="predict" class="panel">
+  <div class="grid2">
+    <div class="box">
+      <h3>1 · Upload a leaf image</h3>
+      <label class="drop" id="drop">
+        <input type="file" id="predFile" accept="image/*" hidden>
+        <img id="predPreview" alt="">
+        <span id="dropText">Drop an image here or <u>browse</u><br><small>jpg / png — a close-up of one coffee leaf</small></span>
+      </label>
+      <button class="btn primary" id="predBtn" disabled>Predict</button>
+    </div>
+    <div class="box">
+      <h3>2 · Model prediction</h3>
+      <div id="predEmpty" class="muted">The prediction will appear here.</div>
+      <div id="predResult" hidden>
+        <div class="pred-label" id="predLabel"></div>
+        <div class="pred-conf" id="predConf"></div>
+        <p id="predDesc"></p>
+        <div id="probBars"></div>
+        <p class="muted small" id="predMeta"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ INSIGHTS ============================ -->
+<section id="insights" class="panel">
+  <div class="grid2">
+    <div class="box">
+      <h3>Dataset: downloaded vs. unique images</h3>
+      <canvas id="countChart" height="170"></canvas>
+      <p class="story"><b>Story.</b> The download has ~28k files, but most are duplicates or rotated copies:
+        Healthy has 2,885 files yet only 60 unique images, taken from about 12 distinct leaves.
+        We removed duplicates and split train/test <i>by leaf</i> so the test score is honest. After cleaning, the classes are
+        imbalanced (Miner ≈ 22× Healthy), so training uses class weights and augmentation.</p>
+    </div>
+    <div class="box">
+      <h3>Feature 1 · Greenness (Excess-Green index)</h3>
+      <canvas id="f_green_index" height="170"></canvas>
+      <p class="story" id="s_green_index"></p>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="box">
+      <h3>Feature 2 · Lesion fraction (non-green leaf pixels)</h3>
+      <canvas id="f_lesion_fraction" height="170"></canvas>
+      <p class="story" id="s_lesion_fraction"></p>
+    </div>
+    <div class="box">
+      <h3>Feature 3 · Texture (edge strength)</h3>
+      <canvas id="f_texture" height="170"></canvas>
+      <p class="story" id="s_texture"></p>
+    </div>
+  </div>
+  <div class="box">
+    <h3>Average colour of each class</h3>
+    <div id="swatches" class="swatches"></div>
+  </div>
+</section>
+
+<!-- ============================ RETRAIN ============================ -->
+<section id="retrain" class="panel">
+  <div class="grid2">
+    <div class="box">
+      <h3>1 · Upload new labelled data (bulk)</h3>
+      <p class="muted small">Either pick many images and their class, <b>or</b> upload a .zip with one folder per class
+        (<span class="mono">Healthy/…, Leaf_rust/…</span>). Files are stored and registered in the database until the next retraining.</p>
+      <div class="row">
+        <select id="upLabel"><option value="">— class (not needed for zip) —</option></select>
+        <input type="file" id="upFiles" multiple accept="image/*,.zip">
+      </div>
+      <button class="btn" id="upBtn">Upload</button>
+      <div id="upResult" class="muted small"></div>
+    </div>
+    <div class="box">
+      <h3>2 · Trigger retraining</h3>
+      <div id="pendingInfo" class="muted"></div>
+      <div class="bar"><div id="thresholdBar"></div></div>
+      <p class="muted small" id="thresholdText"></p>
+      <div class="row">
+        <label class="small">Epochs <input type="number" id="epochs" value="5" min="1" max="30"></label>
+        <button class="btn primary" id="retrainBtn">Retrain model</button>
+      </div>
+      <pre id="retrainLog" class="log">No retraining running.</pre>
+    </div>
+  </div>
+  <div class="box">
+    <h3>Retraining history</h3>
+    <table class="runs" id="runsTable"></table>
+  </div>
+</section>
+</main>
+
+<footer>Data: JMuBEN &amp; JMuBEN2 (Jepkoech et al., Mendeley Data, CC BY 4.0) · Model: MobileNetV2 transfer learning · <a href="/docs">API docs (Swagger)</a></footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+# Scalable local deployment: N identical API containers behind an nginx load balancer.
+#
+#   docker compose up -d --build --scale api=3      # 3 model containers
+#   open http://localhost:8080
+#
+# Each container gets API_CPUS CPUs (default 1) and 512 MB, like the free cloud instance,
+# so adding containers really adds capacity - this is what the Locust flood test measures.
+services:
+  api:
+    build: .
+    image: coffee-leaf-api:latest
+    environment:
+      - AUTO_RETRAIN=true
+      - RETRAIN_THRESHOLD=50
+      - TF_NUM_THREADS=${API_CPUS:-1}
+    volumes:                    # shared by all replicas: uploads, database and model files
+      - leaf-data:/app/data
+      - leaf-models:/app/models
+    expose:
+      - "8000"
+    deploy:
+      resources:
+        limits:
+          cpus: "${API_CPUS:-1}"
+          memory: 512m
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  leaf-data:
+  leaf-models:

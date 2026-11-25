@@ -1,0 +1,6 @@
+# Notebook + load testing (install on top of requirements.txt)
+-r requirements.txt
+pandas>=2.2
+matplotlib>=3.9
+jupyter
+locust>=2.24

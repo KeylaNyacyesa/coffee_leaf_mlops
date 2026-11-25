@@ -1,0 +1,14 @@
+# Render Blueprint: one free web service built from the Dockerfile.
+services:
+  - type: web
+    name: coffeeleaf-keyla
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: TF_NUM_THREADS
+        value: "1"
+      - key: AUTO_RETRAIN
+        value: "true"
+      - key: RETRAIN_THRESHOLD
+        value: "50"
