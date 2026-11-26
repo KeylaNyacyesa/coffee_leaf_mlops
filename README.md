@@ -136,6 +136,9 @@ Keeping MobileNetV2 fixed during retraining is a deliberate deployment trade-off
 Code: [`src/retrain.py`](src/retrain.py), [`src/serving.py`](src/serving.py), [`src/database.py`](src/database.py).
 Command line: `python -m src.retrain --upload-dir path/to/<class>/<images>`.
 
+**Images that are not coffee leaves.** A classifier always picks one of its classes, even for a photo of a person. So before
+diagnosing, the app measures how far the image's features are from its 5 nearest training images (cosine distance). Above 0.47 the app answers *"This doesn't look like a coffee leaf photo (it is far from every image the model was trained on), so no diagnosis is given."* Retraining applies the same check to uploads, so non-leaf images never enter the training data.
+
 ---
 
 ## 5. Repository structure

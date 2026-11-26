@@ -149,13 +149,21 @@ $("predBtn").addEventListener("click", async () => {
   try {
     const r = await api("/predict", { method: "POST", body: fd });
     $("predEmpty").hidden = true; $("predResult").hidden = false;
-    $("predLabel").textContent = r.prediction.replace("_", " ");
-    $("predLabel").style.color = CLASS_COLORS[r.prediction] || "";
-    $("predConf").textContent = `confidence ${(100 * r.confidence).toFixed(1)}%`;
-    $("predDesc").textContent = r.description;
-    const sorted = Object.entries(r.probabilities).sort((a, b) => b[1] - a[1]);
-    $("probBars").innerHTML = sorted.map(([c, p], i) =>
-      `<div class="prob ${i === 0 ? "top" : ""}"><span>${c.replace("_", " ")}</span><div class="track"><div class="fill" style="width:${(100 * p).toFixed(1)}%"></div></div><span class="mono">${(100 * p).toFixed(1)}%</span></div>`).join("");
+    if (r.is_leaf) {
+      $("predLabel").textContent = r.prediction.replace("_", " ");
+      $("predLabel").style.color = CLASS_COLORS[r.prediction] || "";
+      $("predConf").textContent = `confidence ${(100 * r.confidence).toFixed(1)}%`;
+      $("predDesc").textContent = r.description;
+      const sorted = Object.entries(r.probabilities).sort((a, b) => b[1] - a[1]);
+      $("probBars").innerHTML = sorted.map(([c, p], i) =>
+        `<div class="prob ${i === 0 ? "top" : ""}"><span>${c.replace("_", " ")}</span><div class="track"><div class="fill" style="width:${(100 * p).toFixed(1)}%"></div></div><span class="mono">${(100 * p).toFixed(1)}%</span></div>`).join("");
+    } else {
+      $("predLabel").textContent = "Not a coffee leaf";
+      $("predLabel").style.color = "#6b7366";
+      $("predConf").textContent = `distance from the training images ${r.distance} (coffee leaves are below ${r.threshold})`;
+      $("predDesc").textContent = r.message;
+      $("probBars").innerHTML = "";
+    }
     $("predMeta").textContent = `${r.filename} · ${r.latency_ms} ms · model ${r.model_version} · container ${r.container}`;
   } catch (e) {
     alert("Prediction failed: " + e.message);

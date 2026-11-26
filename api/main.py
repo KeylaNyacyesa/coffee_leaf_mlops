@@ -74,7 +74,8 @@ def get_predictor():
 
 
 # ---- 3. Monitoring ----
-STATS = {"requests": 0, "predictions": 0, "errors": 0, "class_counts": {c: 0 for c in CLASS_NAMES}}
+STATS = {"requests": 0, "predictions": 0, "errors": 0, "not_a_leaf": 0,
+         "class_counts": {c: 0 for c in CLASS_NAMES}}
 LATENCIES_MS: deque = deque(maxlen=1000)         # last 1000 prediction latencies
 
 
@@ -144,7 +145,10 @@ def predict(file: UploadFile = File(..., description="A photo of one coffee leaf
         raise HTTPException(400, f"Could not process the image: {error}")
 
     STATS["predictions"] += 1
-    STATS["class_counts"][result["prediction"]] += 1
+    if result["is_leaf"]:
+        STATS["class_counts"][result["prediction"]] += 1
+    else:
+        STATS["not_a_leaf"] += 1
     LATENCIES_MS.append(result["latency_ms"])
     return {**result, "filename": file.filename, "container": CONTAINER}
 

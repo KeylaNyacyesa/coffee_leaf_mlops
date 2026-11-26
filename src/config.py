@@ -31,5 +31,10 @@ RETRAIN_THRESHOLD = int(os.getenv("RETRAIN_THRESHOLD", "50"))
 AUTO_RETRAIN = os.getenv("AUTO_RETRAIN", "true").lower() == "true"
 RETRAIN_EPOCHS = int(os.getenv("RETRAIN_EPOCHS", "30"))
 RETRAIN_LR = float(os.getenv("RETRAIN_LR", "5e-4"))
+# Images further than this from their 5 nearest training images (cosine distance between features)
+# are not coffee-leaf photos: no diagnosis is given. 0.47 accepts all 688 test leaves.
+LEAF_DISTANCE_THRESHOLD = float(os.getenv("LEAF_DISTANCE_THRESHOLD", "0.47"))
+LEAF_NEIGHBOURS = 5
+
 # A retrained model is promoted only if test accuracy and macro-F1 drop by no more than this.
 PROMOTION_TOLERANCE = float(os.getenv("PROMOTION_TOLERANCE", "0.02"))

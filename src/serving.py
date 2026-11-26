@@ -23,7 +23,8 @@ from pathlib import Path
 
 import numpy as np
 
-from .config import BACKBONE_PATH, CLASS_NAMES, EMBEDDINGS_PATH, HEAD_PATH
+from .config import (BACKBONE_PATH, CLASS_NAMES, EMBEDDINGS_PATH, HEAD_PATH, LEAF_DISTANCE_THRESHOLD,
+                     LEAF_NEIGHBOURS)
 
 
 # ---- Feature extractor (TensorFlow Lite) ----
@@ -46,6 +47,34 @@ class FeatureExtractor:
             self.interpreter.invoke()
             features.append(self.interpreter.get_tensor(self.output_index)[0].copy())
         return np.stack(features).astype(np.float32)
+
+
+# ---- Is it a coffee leaf at all? ----
+NOT_A_LEAF_MESSAGE = ("This doesn't look like a coffee leaf photo (it is far from every image the model "
+                      "was trained on), so no diagnosis is given.")
+
+
+class LeafCheck:
+    """The classifier always picks one of its 5 classes, even for a photo of a person.
+    This check compares an image's features with those of the training images: a real
+    coffee-leaf photo is close to some of them, anything else is far from all of them."""
+
+    def __init__(self, embeddings: dict, threshold: float = LEAF_DISTANCE_THRESHOLD, k: int = LEAF_NEIGHBOURS):
+        self.train = _unit_rows(embeddings["features"][embeddings["splits"] == "train"])
+        self.threshold, self.k = threshold, k
+
+    def distance(self, features: np.ndarray) -> np.ndarray:
+        """Mean cosine distance to the k nearest training images (0 = identical)."""
+        similarity = _unit_rows(features) @ self.train.T
+        nearest = np.sort(similarity, axis=1)[:, -self.k:]
+        return 1 - nearest.mean(axis=1)
+
+    def is_leaf(self, features: np.ndarray) -> np.ndarray:
+        return self.distance(features) <= self.threshold
+
+
+def _unit_rows(x: np.ndarray) -> np.ndarray:
+    return x / np.maximum(np.linalg.norm(x, axis=1, keepdims=True), 1e-12)
 
 
 # ---- Classifier head (NumPy) ----

@@ -11,11 +11,12 @@ How it fits together
               or from the command line:  python -m src.retrain --upload-dir path/to/new_images
 
   RETRAIN     run_retraining() then runs these steps:
-                1. preprocess the pending uploads (validate, RGB, resize, de-duplicate)
-                2. extract their features with our trained MobileNetV2 (feature_extractor.tflite)
+                1. preprocess the pending uploads: validate, RGB, resize, de-duplicate, extract their
+                   features with our trained MobileNetV2 and reject images that are not coffee leaves
+                2. combine them with the stored features of the existing training images
                 3. load the CURRENT production classifier head as the pre-trained starting point
-                4. fine-tune it on the stored features of the existing training images + the
-                   new ones (Adam, class weights, L2, early stopping on the validation set)
+                4. fine-tune it on old + new training features
+                   (Adam, class weights, L2, early stopping on the validation set)
                 5. compare old vs new model on the held-out test set
                 6. promote the new head only if it is not worse; archive the old one
                 7. record everything in the database
@@ -38,7 +39,7 @@ from .config import (ARCHIVE_DIR, CLASS_NAMES, HEAD_PATH, METRICS_PATH, PROMOTIO
                      RETRAIN_EPOCHS, RETRAIN_LR, ROOT, TRAIN_DIR, UPLOAD_DIR)
 from .preprocessing import (IMAGE_EXTS, class_weights, file_md5, image_to_array, is_valid_image,
                             read_manifest, write_manifest)
-from .serving import (ClassifierHead, FeatureExtractor, load_embeddings, metrics_from_proba,
+from .serving import (ClassifierHead, FeatureExtractor, LeafCheck, load_embeddings, metrics_from_proba,
                       save_embeddings, train_head)
 
 
@@ -122,23 +123,23 @@ def run_retraining(trigger: str = "manual", epochs: int = RETRAIN_EPOCHS, lr: fl
     try:
         log(f"retraining started ({trigger} trigger), {len(pending)} uploaded images pending")
 
-        # 1. Preprocess the uploaded images
+        # 1. Preprocess the uploaded images (and compute their features with our trained MobileNetV2)
         manifest = read_manifest()
-        new_rows, X_new, y_new, used_ids = preprocess_uploads(pending, manifest, run_id)
-        log(f"step 1 - preprocessed {len(used_ids)} new images ({len(pending) - len(used_ids)} rejected)")
+        data = load_embeddings()
+        new_rows, features_new, y_new, used_ids, rejected = preprocess_uploads(pending, manifest, data, run_id)
+        reasons = ", ".join(f"{n} {reason}" for reason, n in rejected.items())
+        log(f"step 1 - preprocessed {len(used_ids)} new images" + (f" (rejected: {reasons})" if rejected else ""))
         if not used_ids:
             db.finish_run(run_id, status="skipped", message="all uploads were rejected during preprocessing")
             return {"status": "skipped", "message": "All uploads were rejected during preprocessing"}
 
-        # 2. Features of the new images (from our trained MobileNetV2) + stored features of the dataset
-        features_new = FeatureExtractor()(X_new)
-        data = load_embeddings()
+        # 2. Training data = stored features of the dataset + the new images
         is_train, is_val, is_test = (data["splits"] == split for split in ("train", "val", "test"))
         X_train = np.concatenate([data["features"][is_train], features_new])
         y_train = np.concatenate([data["labels"][is_train], y_new])
         X_val, y_val = data["features"][is_val], data["labels"][is_val]
         X_test, y_test = data["features"][is_test], data["labels"][is_test]
-        log(f"step 2 - features extracted; training set: {is_train.sum()} existing + {len(y_new)} new images")
+        log(f"step 2 - training set: {is_train.sum()} existing + {len(y_new)} new images")
 
         # 3. The current production head is the pre-trained starting point
         current = ClassifierHead.load(HEAD_PATH)
@@ -195,34 +196,48 @@ def run_retraining(trigger: str = "manual", epochs: int = RETRAIN_EPOCHS, lr: fl
         raise
 
 
-def preprocess_uploads(pending: list[dict], manifest: list[dict], run_id: int):
-    """Validate + standardise pending uploads and copy them into data/train/<label>/."""
+def preprocess_uploads(pending: list[dict], manifest: list[dict], embeddings: dict, run_id: int):
+    """Validate, standardise and check the pending uploads; save the accepted ones to data/train/<label>/.
+
+    Rejected: unreadable files, images already in the dataset, and images that are not
+    coffee-leaf photos (the same check the prediction uses)."""
     known_md5 = {row["md5"] for row in manifest}
-    new_rows, images, labels, used_ids = [], [], [], []
+    accepted, images, rejected = [], [], {}
+
+    def reject(upload, reason):
+        db.set_upload_status([upload["id"]], "rejected", run_id, reason)
+        rejected[reason] = rejected.get(reason, 0) + 1
 
     for upload in pending:
-        try:
-            if upload["md5"] in known_md5:
-                raise ValueError("already in the dataset")
-            image = image_to_array((ROOT / upload["path"]).read_bytes())    # RGB, resized to 128x128
-        except Exception as error:                                          # noqa: BLE001
-            db.set_upload_status([upload["id"]], "rejected", run_id, str(error)[:120])
+        if upload["md5"] in known_md5:
+            reject(upload, "already in the dataset")
             continue
+        try:
+            images.append(image_to_array((ROOT / upload["path"]).read_bytes()))    # RGB, 128x128
+        except Exception:                                                        # noqa: BLE001
+            reject(upload, "unreadable image")
+            continue
+        known_md5.add(upload["md5"])
+        accepted.append(upload)
 
+    features = FeatureExtractor()(np.stack(images)) if images else np.zeros((0, 1280), np.float32)
+    is_leaf = LeafCheck(embeddings).is_leaf(features)
+
+    new_rows, keep = [], []
+    for upload, image, leaf in zip(accepted, images, is_leaf):
+        if not leaf:
+            reject(upload, "not a coffee leaf photo")
+            continue
         destination = TRAIN_DIR / upload["label"] / f"{upload['label']}_up_{upload['md5'][:12]}.jpg"
         destination.parent.mkdir(parents=True, exist_ok=True)
         Image.fromarray(image).save(destination, quality=95)
-        known_md5.add(upload["md5"])
-
-        images.append(image)
-        labels.append(CLASS_NAMES.index(upload["label"]))
-        used_ids.append(upload["id"])
+        keep.append(upload)
         new_rows.append({"path": destination.relative_to(ROOT).as_posix(), "label": upload["label"],
                          "group": f"upload-{upload['md5'][:12]}", "split": "train",
                          "md5": upload["md5"], "source": f"upload-run{run_id}"})
 
-    X_new = np.stack(images) if images else np.zeros((0, 128, 128, 3), np.uint8)
-    return new_rows, X_new, np.array(labels, dtype=np.int64), used_ids
+    labels = np.array([CLASS_NAMES.index(u["label"]) for u in keep], dtype=np.int64)
+    return new_rows, features[is_leaf], labels, [u["id"] for u in keep], rejected
 
 
 def promote_head(head, new, old, history, run_id, version, n_train):

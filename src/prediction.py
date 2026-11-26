@@ -15,9 +15,9 @@ from pathlib import Path
 
 import numpy as np
 
-from .config import BACKBONE_PATH, CLASS_NAMES, CLASS_NAMES_PATH, HEAD_PATH, METRICS_PATH
+from .config import BACKBONE_PATH, CLASS_NAMES, CLASS_NAMES_PATH, EMBEDDINGS_PATH, HEAD_PATH, METRICS_PATH
 from .preprocessing import image_to_array
-from .serving import ClassifierHead, FeatureExtractor
+from .serving import NOT_A_LEAF_MESSAGE, ClassifierHead, FeatureExtractor, LeafCheck, load_embeddings
 
 DISEASE_INFO = {
     "Cercospora": "Cercospora leaf spot (Cercospora coffeicola): brown spots with a pale centre and yellow halo.",
@@ -29,8 +29,8 @@ DISEASE_INFO = {
 
 
 class Predictor:
-    """Thread-safe model wrapper. It reloads the classifier head when the file on disk
-    changes, e.g. after a retraining run in this or another container."""
+    """Thread-safe model wrapper. It reloads the classifier head and the leaf check when
+    their files change on disk, e.g. after a retraining run in this or another container."""
 
     def __init__(self, backbone_path: Path = BACKBONE_PATH, head_path: Path = HEAD_PATH,
                  check_every: float = 10.0):
@@ -43,10 +43,11 @@ class Predictor:
         self.load()
 
     def load(self):
-        """(Re)load the classifier head, the class names and the model version."""
+        """(Re)load the classifier head, the leaf check, the class names and the model version."""
         with self._lock:
-            self._mtime = self.head_path.stat().st_mtime
+            self._mtime = self._files_mtime()
             self.head = ClassifierHead.load(self.head_path)
+            self.leaf_check = LeafCheck(load_embeddings(EMBEDDINGS_PATH))
             if CLASS_NAMES_PATH.exists():
                 self.class_names = json.loads(CLASS_NAMES_PATH.read_text())
             try:
@@ -56,34 +57,47 @@ class Predictor:
             self.loaded_at = time.time()
 
     def maybe_reload(self):
-        """Every `check_every` seconds, reload if the head file changed (e.g. after retraining)."""
+        """Every `check_every` seconds, reload if the model files changed (e.g. after retraining)."""
         now = time.time()
         if now - self._last_check < self.check_every:
             return
         self._last_check = now
         try:
-            if self.head_path.stat().st_mtime != self._mtime:
+            if self._files_mtime() != self._mtime:
                 self.load()
         except FileNotFoundError:
             pass
+
+    def _files_mtime(self) -> tuple:
+        return self.head_path.stat().st_mtime, EMBEDDINGS_PATH.stat().st_mtime
 
     @property
     def version(self) -> str:
         if self._version:
             return self._version
-        return time.strftime("%Y%m%d-%H%M%S", time.localtime(self._mtime))
+        return time.strftime("%Y%m%d-%H%M%S", time.localtime(self._mtime[0]))
 
     def predict_array(self, image: np.ndarray) -> dict:
         self.maybe_reload()
         with self._lock:
-            proba = self.head.predict_proba(self.extractor(image[None]))[0]
+            features = self.extractor(image[None])
+            distance = float(self.leaf_check.distance(features)[0])
+            proba = self.head.predict_proba(features)[0]
+
+        if distance > self.leaf_check.threshold:
+            return {"is_leaf": False, "prediction": None, "message": NOT_A_LEAF_MESSAGE,
+                    "distance": round(distance, 3), "threshold": self.leaf_check.threshold,
+                    "model_version": self.version}
+
         idx = int(proba.argmax())
         label = self.class_names[idx]
         return {
+            "is_leaf": True,
             "prediction": label,
             "confidence": float(proba[idx]),
             "probabilities": {c: float(p) for c, p in zip(self.class_names, proba)},
             "description": DISEASE_INFO.get(label, ""),
+            "distance": round(distance, 3),
             "model_version": self.version,
         }
 
@@ -101,4 +115,4 @@ if __name__ == "__main__":
     predictor = Predictor()
     for f in sys.argv[1:]:
         r = predictor.predict(f)
-        print(f"{f}: {r['prediction']} ({r['confidence']:.1%})")
+        print(f"{f}: {r['prediction']} ({r['confidence']:.1%})" if r["is_leaf"] else f"{f}: {r['message']}")
