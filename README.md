@@ -277,16 +277,16 @@ python scripts/run_load_tests.py                     # 100 users, 60 s per confi
 ```
 
 ### Results
-<!-- Paste load_test_results/summary.md here after running the script, and add the chart: -->
-<!-- ![latency](load_test_results/latency_vs_containers.png) -->
+![latency](load_test_results/latency_vs_containers.png)
 
-*Machine:* `<CPU model, cores, RAM>` · 100 concurrent users · spawn rate 10/s · 60 s per run
+## Flood test results: `/predict` (100 concurrent users, 60s per run)
 
-| Containers | Requests | Failures | Throughput (req/s) | Avg (ms) | Median (ms) | p95 (ms) | p99 (ms) |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | | | | | | | |
-| 2 | | | | | | | |
-| 4 | | | | | | | |
+| Containers | Requests | Failures | Throughput (req/s) | Avg (ms) | Median (ms) | p95 (ms) | p99 (ms) | Max (ms) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 502 | 0 | 8.6 | 8862 | 10000 | 12000 | 15000 | 16641 |
+| 2 | 1134 | 0 | 19.3 | 3352 | 2300 | 8200 | 8600 | 12012 |
+| 4 | 2235 | 0 | 37.4 | 1306 | 1200 | 3000 | 3900 | 6919 |
+
 
 **Interpretation:** `<what happened to latency and throughput as containers were added, where it stopped scaling, and why (e.g. host CPU cores saturated)>`
 
