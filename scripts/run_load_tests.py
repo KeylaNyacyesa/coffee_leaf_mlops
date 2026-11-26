@@ -63,7 +63,7 @@ def main():
         print(f"\n===== {n} container(s) =====", flush=True)
         run(["docker", "compose", "up", "-d", "--scale", f"api={n}"])
         wait_for_containers(n)
-        time.sleep(5)              # let the last container finish its warm-up
+        time.sleep(10)             # let the containers settle (and the previous run's queue drain)
         run([sys.executable, "-m", "locust", "-f", "locustfile.py", "--host", HOST, "--headless",
              "-u", str(args.users), "-r", str(args.spawn_rate), "-t", args.duration,
              "--csv", str(RESULTS / f"{n}_containers"), "--only-summary"])

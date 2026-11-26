@@ -90,8 +90,9 @@ async def count_requests(request: Request, call_next):
 
 
 @app.get("/health", tags=["monitoring"])
-def health():
-    """Is the API up, how long has it been up, and which model is it serving?"""
+async def health():
+    """Is the API up, how long has it been up, and which model is it serving?
+    Async, so it answers immediately even while every worker thread is busy predicting."""
     predictor = _predictor
     return {
         "status": "ok" if predictor else "model_not_loaded",
@@ -104,7 +105,7 @@ def health():
 
 
 @app.get("/stats", tags=["monitoring"])
-def stats():
+async def stats():
     """Request counts and prediction latency for THIS container."""
     latencies = sorted(LATENCIES_MS)
 
